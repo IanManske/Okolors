@@ -1,6 +1,6 @@
 [package]
 name = "okolors-cli"
-version = "0.8.1"
+version = "0.9.0"
 rust-version.workspace = true
 edition.workspace = true
 description = "Create color palettes from images by performing k-means clustering in the Oklab color space."
