@@ -1,12 +1,9 @@
-//! Specifies the CLI and handles arg parsing
-
 use clap::{Parser, ValueEnum};
-use okolors::{AboveMaxLen, PaletteSize};
+use okolors::{KmeansOptions, PaletteSize};
 use palette::Okhsl;
 use std::{ops::RangeInclusive, path::PathBuf};
 
-/// Supported output formats for the final colors
-#[derive(Copy, Clone, ValueEnum)]
+#[derive(Copy, Clone, PartialEq, Eq, ValueEnum)]
 pub enum Format {
     /// sRGB hexcode
     Hex,
@@ -16,8 +13,7 @@ pub enum Format {
     Swatch,
 }
 
-/// Sort orders for the final colors
-#[derive(Copy, Clone, ValueEnum)]
+#[derive(Copy, Clone, PartialEq, Eq, ValueEnum)]
 pub enum Sort {
     /// Ascending hue
     H,
@@ -29,12 +25,9 @@ pub enum Sort {
     N,
 }
 
-/// Ways to colorize the output text
-#[derive(Copy, Clone, ValueEnum)]
+#[derive(Copy, Clone, PartialEq, Eq, ValueEnum)]
 pub enum Colorize {
-    /// Foreground
     Fg,
-    /// Background
     Bg,
 }
 
@@ -89,12 +82,11 @@ pub struct Options {
 
     /// The (maximum) number of colors to put in the palette
     ///
-    /// The provided value should be in the range [0, 256].
-    #[arg(short, default_value_t = 8.into(), value_parser = parse_palette_size)]
+    /// The provided value should be in the range [1, 256].
+    #[arg(short, default_value_t = PaletteSize::from_u8_clamped(8), value_parser = parse_palette_size)]
     pub k: PaletteSize,
 
-    /// The number of samples to make, expressed as a percentage of
-    /// the number of unique colors in the image
+    /// The proportion of the image to sample.
     ///
     /// Higher sampling factors take longer but give more accurate results.
     /// The sampling factor can be above `1.0`, but this may not give noticeably better results.
@@ -102,25 +94,26 @@ pub struct Options {
     #[arg(short = 'f', long, default_value_t = 0.5, value_parser = parse_sampling_factor)]
     pub sampling_factor: f32,
 
-    /// The maximum image size, in number of pixels, before a thumbnail is created
+    /// The maximum number of pixels to sample from the image for k-means quantization.
     ///
-    /// Unfortunately, this option may reduce the color accuracy,
-    /// as multiple pixels in the original image are interpolated to form a pixel in the thumbnail.
-    /// This option is intended for reducing the time needed for large images,
-    /// but it can also be used to provide fast, inaccurate results for any image.
-    #[arg(short = 'p', long, default_value_t = u32::MAX)]
-    pub max_pixels: u32,
+    /// The number of samples for k-means determined by the sampling factor is proportional to the
+    /// image size. However, samples after a certain point will likely not affect the results in a
+    /// significant way, since the k-means quantizition incorporates a learning rate that
+    /// increasingly diminishes the impact of new samples. So, you can use this option to limit the
+    /// number samples in the case of a large image.
+    #[arg(short = 'n', long, default_value_t = KmeansOptions::new().get_max_samples())]
+    pub max_samples: u32,
 
     /// The number of samples to batch together in k-means
     ///
     /// Increasing the batch size reduces the running time but with dimishing returns.
     /// Smaller batch sizes are more accurate but slower to run.
     #[cfg(feature = "threads")]
-    #[arg(long, default_value_t = 4096)]
+    #[arg(long, default_value_t = KmeansOptions::new().get_batch_size())]
     pub batch_size: u32,
 
     /// The seed value used for the random number generator
-    #[arg(long, default_value_t = 0)]
+    #[arg(long, default_value_t = KmeansOptions::new().get_seed())]
     pub seed: u64,
 
     /// The number of threads to use
@@ -135,15 +128,13 @@ pub struct Options {
     pub verbose: bool,
 }
 
-/// Parse the palette size and ensure it is <= `MAX_COLORS`
 fn parse_palette_size(s: &str) -> Result<PaletteSize, String> {
     let value: u16 = s.parse().map_err(|e| format!("{e}"))?;
     value
         .try_into()
-        .map_err(|AboveMaxLen(max)| format!("not in the range [0, {max}]"))
+        .map_err(|_| "not in the range [1, 256]".to_owned())
 }
 
-/// Parse a float value and ensure it in the provided range
 fn parse_float_in_range(s: &str, range: RangeInclusive<f32>) -> Result<f32, String> {
     let value = s.parse().map_err(|e| format!("{e}"))?;
     if range.contains(&value) {

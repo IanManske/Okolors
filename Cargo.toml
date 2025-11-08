@@ -1,12 +1,80 @@
 [workspace]
 members = [
   "okolors",
-  "okolors-bin",
+  "okolors-cli",
 ]
-resolver = "2"
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.90"
+
+[workspace.dependencies]
+palette = { version = "0.7.6", default-features = false }
+image = { version = "0.25.0", default-features = false }
+rayon = "1.10.0"
 
 [profile.release]
 strip = true
 panic = "abort"
 codegen-units = 1
 lto = "fat"
+
+[workspace.lints.rust]
+future-incompatible = "warn"
+keyword-idents = "warn"
+let-underscore = "warn"
+nonstandard-style = "warn"
+refining-impl-trait = "warn"
+rust-2018-idioms = "warn"
+unused = "warn"
+unsafe_op_in_unsafe_fn = "warn"
+
+[workspace.lints.rustdoc]
+all = "warn"
+
+[workspace.lints.clippy]
+cargo = { level = "warn", priority = -1 }
+correctness = { level = "deny", priority = -1 }
+complexity = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+perf = { level = "warn", priority = -1 }
+style = { level = "warn", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+# Debug
+unimplemented = "warn"
+todo = "warn"
+dbg_macro = "warn"
+use_debug = "warn"
+# Unsafe
+undocumented_unsafe_blocks = "warn"
+multiple_unsafe_ops_per_block = "warn"
+# Clarity
+str_to_string = "warn"
+string_to_string = "warn"
+string_slice = "warn"
+suspicious_xor_used_as_pow = "warn"
+# Style
+unneeded_field_pattern = "warn"
+unnecessary_self_imports = "warn"
+self_named_module_files = "warn"
+unused_trait_names = "warn"
+if_then_some_else_none = "warn"
+needless_raw_strings = "warn"
+precedence_bits = "warn"
+ref_patterns = "warn"
+semicolon_inside_block = "warn"
+wildcard_enum_match_arm = "warn"
+# Perf
+string_lit_chars_any = "warn"
+rc_buffer = "warn"
+# Other
+lossy_float_literal = "warn"
+partial_pub_fields = "warn"
+tests_outside_test_module = "warn"
+# Allow some pedantic lints
+many_single_char_names = "allow"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+semicolon_if_nothing_returned = "allow"
+unreadable_literal = "allow"

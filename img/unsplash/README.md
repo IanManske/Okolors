@@ -1,5 +1,4 @@
-The images in this directory (excluding subdirectories) were gathered from [Unsplash](https://unsplash.com/)
-and are available under the [Unsplash License](https://unsplash.com/license).
+The images in this directory were gathered from [Unsplash](https://unsplash.com/) and are available under the [Unsplash License](https://unsplash.com/license).
 
 # Attribution
 

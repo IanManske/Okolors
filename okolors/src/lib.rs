@@ -1,22 +1,26 @@
 //! Create a color palette from an image using k-means clustering in the Oklab color space.
 //!
-//! This library is a simple wrapper around the [`quantette`] crate
-//! but only exposes functionality for generating color palettes.
-//! Additionally, this crate adds a few additional options not present in [`quantette`].
+//! This library is a simple wrapper around the [`quantette`] crate but only exposes functionality
+//! for generating color palettes. Additionally, this crate adds a few additional options not
+//! present in [`quantette`]. It is intended that additional stylistic and opinionated options will
+//! be added to this crate, whereas [`quantette`] is solely focused on accurate color quantization.
 //!
 //! # Features
-//! This crate has two features that are enabled by default:
-//! - `threads`: adds a few methods to the [`Okolors`] builder
-//!     ([`parallel`](Okolors::parallel) and [`batch_size`](Okolors::batch_size)).
+//!
+//! This crate has three features that are enabled by default:
+//! - `threads`: adds the [`parallel`](Okolors::parallel) option.
 //! - `image`: enables integration with the [`image`] crate.
+//! - `std`: use Rust's standard library (this crate is `no_std` compatible if all features are disabled).
 //!
 //! # Examples
 //!
 //! To start, create an [`Okolors`] from a [`RgbImage`] (note that the `image` feature is needed):
-//! ```no_run
-//! # use okolors::Okolors;
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let img = image::open("some image")?.into_rgb8();
+//! ```
+//! # fn main() -> Result<(), okolors::LengthOutOfRange> {
+//! use okolors::Okolors;
+//!
+//! // let img = image::open("some image")?.into_rgb8();
+//! let img = image::RgbImage::new(256, 256);
 //! let palette_builder = Okolors::try_from(&img)?;
 //! # Ok(())
 //! # }
@@ -24,27 +28,26 @@
 //!
 //! Instead of an [`RgbImage`], a slice of [`Srgb<u8>`] colors can be used instead:
 //! ```
-//! # use okolors::{AboveMaxLen, Okolors};
+//! # use okolors::Okolors;
 //! # use palette::Srgb;
-//! # fn main() -> Result<(), AboveMaxLen<u32>> {
 //! let srgb = vec![Srgb::new(0, 0, 0)];
-//! let palette_builder = Okolors::try_from(srgb.as_slice())?;
-//! # Ok(())
-//! # }
+//! let palette_builder = Okolors::new(&srgb).unwrap();
 //! ```
 //!
 //! If the default options aren't to your liking, you can tweak them:
 //! ```
-//! # use okolors::{AboveMaxLen, Okolors};
+//! # use okolors::{LengthOutOfRange, Okolors};
 //! # use image::RgbImage;
-//! # fn main() -> Result<(), AboveMaxLen<u32>> {
+//! # fn main() -> Result<(), LengthOutOfRange> {
 //! # let img = RgbImage::new(0, 0);
+//! use okolors::{PaletteSize, KmeansOptions};
+//!
 //! let palette_builder = Okolors::try_from(&img)?
-//!     .palette_size(16)
+//!     .palette_size(PaletteSize::from_u8_clamped(16))
 //!     .lightness_weight(0.5)
-//!     .sampling_factor(0.25)
-//!     .parallel(true) // this option requires the `threads` feature
-//!     .sort_by_frequency(true);
+//!     .kmeans_options(KmeansOptions::new().sampling_factor(1.0))
+//!     .sort_by_frequency(true)
+//!     .parallel(true);
 //! # Ok(())
 //! # }
 //! ```
@@ -54,164 +57,113 @@
 //! - [`Okolors::srgb_palette`] for a [`Srgb`] palette (components are `f32` instead of `u8`)
 //! - [`Okolors::oklab_palette`] for an [`Oklab`] palette
 //!
-//! For example:
-//! ```
-//! # use okolors::{AboveMaxLen, Okolors};
-//! # fn main() -> Result<(), AboveMaxLen<u32>> {
-//! # let mut palette_builder = Okolors::new([].as_slice().try_into()?);
-//! let palette = palette_builder.srgb8_palette();
-//! # Ok(())
-//! # }
-//! ```
-//!
 //! To clarify, the [`Oklab`] colorspace is used to quantize the colors in all cases.
 //! The methods above just determine what colorspace you want the final colors converted into.
 //!
 //! All of the color types present in the public API for this crate
-//! (like [`Srgb`] or [`Oklab`] are from the [`palette`] crate.
+//! (like [`Srgb`] or [`Oklab`]) are from the [`palette`] crate.
 //! You can check it out for more information. For example, its documentation
 //! should provide you everything you need to know to [cast](palette::cast)
-//! a `Vec<Srgb<u8>>` into a `Vec<[u8; 3]>`.
+//! a `Vec<Srgb<u8>>` into a `Vec<[u8; 3]>` or vice versa.
 
-#![deny(unsafe_code, unsafe_op_in_unsafe_fn)]
 #![warn(
-    clippy::pedantic,
-    clippy::cargo,
-    clippy::use_debug,
-    clippy::dbg_macro,
-    clippy::todo,
-    clippy::unimplemented,
     clippy::unwrap_used,
-    clippy::unwrap_in_result,
     clippy::expect_used,
-    clippy::unneeded_field_pattern,
-    clippy::unnecessary_self_imports,
-    clippy::str_to_string,
-    clippy::string_to_string,
-    clippy::string_slice,
-    missing_docs,
-    clippy::missing_docs_in_private_items,
-    rustdoc::all,
-    clippy::float_cmp_const,
-    clippy::lossy_float_literal
-)]
-#![allow(
-    clippy::doc_markdown,
-    clippy::module_name_repetitions,
-    clippy::many_single_char_names,
-    clippy::missing_panics_doc,
-    clippy::unreadable_literal
+    clippy::unreachable,
+    clippy::panic,
+    clippy::exit,
+    clippy::unused_result_ok,
+    clippy::print_stdout,
+    clippy::print_stderr,
+    missing_docs
 )]
 
-#[cfg(not(feature = "_internal"))]
-mod internal;
+pub mod deps;
 
-#[cfg(feature = "_internal")]
-pub mod internal;
+// We have tight integration/control over `quantette`, let's re-export the types directly.
+pub use quantette::{LengthOutOfRange, MAX_PIXELS, PaletteSize, kmeans::KmeansOptions};
 
 #[cfg(feature = "image")]
 use image::RgbImage;
-use palette::{Oklab, Srgb};
-use quantette::QuantizeOutput;
-
-// Re-export third-party crates whose types are part of our public API
-#[cfg(feature = "image")]
-pub use image;
-pub use palette;
-// We have tight integration/control over `quantette`, let's re-export the types directly.
-pub use quantette::{AboveMaxLen, ColorSlice, PaletteSize, MAX_COLORS, MAX_PIXELS};
+use palette::{IntoColor, Oklab, Srgb};
+use quantette::{
+    ImageRef,
+    color_space::{oklab_to_srgb8, srgb8_to_oklab},
+    dedup,
+    kmeans::Kmeans,
+    wu::{BinnerF32x3, WuF32x3},
+};
+#[cfg(feature = "threads")]
+use {quantette::color_space::srgb8_to_oklab_par, rayon::prelude::*};
 
 /// A builder struct to specify options for palette generation.
 ///
 /// See the [crate] documentation for more information and examples.
-///
-/// # Examples
-///
-/// Here is an example workflow showcasing some of the more useful methods.
-/// ```no_run
-/// # use okolors::Okolors;
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let img = image::open("some image")?.into_rgb8();
-/// let palette = Okolors::try_from(&img)?
-///     .palette_size(16)
-///     .lightness_weight(0.5)
-///     .sampling_factor(0.25)
-///     .sort_by_frequency(true)
-///     .srgb8_palette();
-/// # Ok(())
-/// # }
-/// ```
 #[derive(Debug, Clone)]
 #[must_use]
 pub struct Okolors<'a> {
     /// The colors to create a palette from.
-    colors: ColorSlice<'a, Srgb<u8>>,
+    image: ImageRef<'a, Srgb<u8>>,
     /// The amount to scale down the lightness component by.
     lightness_weight: f32,
     /// The number of colors to have in the palette.
     palette_size: PaletteSize,
-    /// The percentage of the unique colors to sample.
-    sampling_factor: f32,
-    /// Return the palette sorted by increasing frequency.
+    /// The options to use for k-means quantization.
+    kmeans_options: KmeansOptions,
+    /// Whether or not to dedup the input colors as an optimization.
+    dedup: Option<bool>,
+    /// Whether to return the palette sorted by increasing frequency.
     sort_by_frequency: bool,
-    /// The batch size for parallel k-means.
     #[cfg(feature = "threads")]
-    batch_size: u32,
     /// Whether or not to use parallelism.
-    #[cfg(feature = "threads")]
     parallel: bool,
-    /// The seed value for the random number generator.
-    seed: u64,
-}
-
-impl<'a> From<ColorSlice<'a, Srgb<u8>>> for Okolors<'a> {
-    /// Create a [`Okolors`] from a [`ColorSlice<Srgb<u8>>`].
-    fn from(colors: ColorSlice<'a, Srgb<u8>>) -> Self {
-        Self::new(colors)
-    }
-}
-
-impl<'a> TryFrom<&'a [Srgb<u8>]> for Okolors<'a> {
-    type Error = AboveMaxLen<u32>;
-
-    /// Try to create a [`Okolors`] from a slice of [`Srgb<u8>`] colors.
-    /// If the length of the slice is above [`MAX_PIXELS`], then an error is returned.
-    fn try_from(slice: &'a [Srgb<u8>]) -> Result<Self, Self::Error> {
-        Ok(Self::new(slice.try_into()?))
-    }
 }
 
 #[cfg(feature = "image")]
 impl<'a> TryFrom<&'a RgbImage> for Okolors<'a> {
-    type Error = AboveMaxLen<u32>;
+    type Error = LengthOutOfRange;
 
     /// Try to create a [`Okolors`] from an [`RgbImage`].
     /// If the number of pixels in the image is above [`MAX_PIXELS`], then an error is returned.
+    #[inline]
     fn try_from(image: &'a RgbImage) -> Result<Self, Self::Error> {
-        Ok(Self::new(image.try_into()?))
+        let image = ImageRef::try_from(image)?;
+        Ok(Self::from_image(image))
+    }
+}
+
+impl<'a> From<ImageRef<'a, Srgb<u8>>> for Okolors<'a> {
+    #[inline]
+    fn from(image: ImageRef<'a, Srgb<u8>>) -> Self {
+        Self::from_image(image)
     }
 }
 
 impl<'a> Okolors<'a> {
-    /// Creates a new [`Okolors`] with default options.
-    ///
-    /// See [`ColorSlice`] for examples on how to create it.
-    ///
-    /// Alternatively, use `Okolors::try_from` or
-    /// `try_into` on an [`RgbImage`] or slice of [`Srgb<u8>`].
-    pub fn new(colors: ColorSlice<'a, Srgb<u8>>) -> Self {
+    #[inline]
+    fn from_image(image: ImageRef<'a, Srgb<u8>>) -> Self {
         Self {
-            colors,
+            image,
             lightness_weight: 0.325,
-            palette_size: 8.into(),
-            sampling_factor: 0.5,
+            palette_size: PaletteSize::from_u8_clamped(8),
+            kmeans_options: KmeansOptions::new().sampling_factor(0.5),
+            dedup: None,
             sort_by_frequency: false,
             #[cfg(feature = "threads")]
-            batch_size: 4096,
-            #[cfg(feature = "threads")]
             parallel: false,
-            seed: 0,
         }
+    }
+
+    /// Creates a new [`Okolors`] with default options.
+    ///
+    /// Returns `None` if the length of `colors` is above [`MAX_PIXELS`].
+    ///
+    /// Alternatively, use `Okolors::try_from` or `try_into` on an [`RgbImage`].
+    #[inline]
+    pub fn new(colors: &'a [Srgb<u8>]) -> Option<Self> {
+        let len = colors.len().try_into().ok()?;
+        let image = ImageRef::new(len, 1, colors).ok()?;
+        Some(Self::from_image(image))
     }
 
     /// Sets the lightness weight used to scale down the lightness component of the colors.
@@ -226,166 +178,229 @@ impl<'a> Okolors<'a> {
     /// and it is clamped to this range otherwise.
     ///
     /// The default lightness weight is `0.325`.
-    pub fn lightness_weight(&mut self, lightness_weight: f32) -> &mut Self {
+    #[inline]
+    pub fn lightness_weight(mut self, lightness_weight: f32) -> Self {
         self.lightness_weight = lightness_weight.clamp(f32::EPSILON, 1.0);
         self
     }
 
     /// Sets the palette size which determines the (maximum) number of colors to have in the palette.
     ///
-    /// You can pass [`u8`] values to this function (including as literals). Or, you can pass
-    /// a [`PaletteSize`]. You can also attempt to convert a [`u16`] into a [`PaletteSize`].
+    /// See the docs for [`PaletteSize`] for more information.
     ///
     /// The default palette size is `8`.
     ///
     /// # Examples
     ///
     /// ```
-    /// # use okolors::{AboveMaxLen, Okolors, PaletteSize};
-    /// # use std::error::Error;
-    /// # fn main() -> Result<(), Box<dyn Error>> {
-    /// # let srgb = vec![];
-    /// Okolors::try_from(srgb.as_slice())?
-    ///     .palette_size(16)
-    ///     .palette_size(PaletteSize::try_from(100_u16)?)
+    /// # use okolors::{Okolors, PaletteSize};
+    /// # fn main() -> Result<(), quantette::PaletteSizeFromIntError> {
+    /// # let srgb = vec![palette::Srgb::new(0, 0, 0)];
+    /// Okolors::new(&srgb)
+    ///     .unwrap()
+    ///     .palette_size(24u16.try_into()?)
+    ///     .palette_size(PaletteSize::from_u8_clamped(16))
     ///     .palette_size(PaletteSize::MAX);
     /// # Ok(())
     /// # }
     /// ```
-    pub fn palette_size(&mut self, palette_size: impl Into<PaletteSize>) -> &mut Self {
-        self.palette_size = palette_size.into();
+    #[inline]
+    pub fn palette_size(mut self, palette_size: PaletteSize) -> Self {
+        self.palette_size = palette_size;
         self
     }
 
-    /// Sets the sampling factor which controls what percentage of the unique colors to sample.
+    /// Sets the options to use for k-means quantization.
     ///
-    /// Higher sampling factors take longer but give more accurate results.
-    /// Sampling factors can be above `1.0`, but this may not give noticeably better results.
-    /// Negative, NAN, or zero sampling factors will skip k-means optimization,
-    /// and the initial palette computed by the first histogram step will be returned.
+    /// See the docs for [`KmeansOptions`] for more information.
     ///
-    /// The default sampling factor is `0.5`, that is, to sample half of the colors.
-    pub fn sampling_factor(&mut self, sampling_factor: f32) -> &mut Self {
-        self.sampling_factor = sampling_factor;
+    /// The default k-means options is `KmeansOptions::new().sampling_factor(0.5)`.
+    #[inline]
+    pub fn kmeans_options(mut self, options: KmeansOptions) -> Self {
+        self.kmeans_options = options;
+        self
+    }
+
+    /// Sets whether or not to deduplicate colors in the input as an optimization.
+    ///
+    /// For large images it is recommended to deduplicate pixels for overall faster quantization.
+    /// For smaller images, not performing deduplication can be faster. The optimal cutoff between a
+    /// "large" and "small" image depends on:
+    /// - the ratio between the number of unique pixels in the image and the total number of pixels in the image
+    /// - hardware and enabled `target_feature`s
+    ///
+    /// Some experimentation may be needed based on your workflow and hardware.
+    ///
+    /// The default value is `None` (automatically choose whether or not to dedup).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use okolors::Okolors;
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let srgb = vec![palette::Srgb::new(0, 0, 0)];
+    /// Okolors::new(srgb.as_slice())
+    ///     .unwrap()
+    ///     .dedup(None) // automatically choose whether or not to dedup
+    ///     .dedup(true) // always dedup
+    ///     .dedup(false); // never dedup
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[inline]
+    pub fn dedup(mut self, dedup: impl Into<Option<bool>>) -> Self {
+        self.dedup = dedup.into();
         self
     }
 
     /// Sort the returned palette by ascending frequency.
     ///
-    /// Frequency refers to the number of pixels in the image that are most similar to the palette color.
-    /// I.e., the number of pixels assigned to the palette color.
+    /// Frequency refers to the number of pixel samples assigned to each palette color during
+    /// k-means quantization.
     ///
     /// By default, the palette is not sorted.
-    pub fn sort_by_frequency(&mut self, sort: bool) -> &mut Self {
+    #[inline]
+    pub fn sort_by_frequency(mut self, sort: bool) -> Self {
         self.sort_by_frequency = sort;
         self
     }
 
-    /// Sets the seed value for the random number generator.
-    ///
-    /// The default seed is `0`.
-    pub fn seed(&mut self, seed: u64) -> &mut Self {
-        self.seed = seed;
-        self
-    }
+    /// Computes the color palette and returns it as [`Oklab`] colors.
+    #[allow(clippy::missing_panics_doc)]
+    #[must_use]
+    pub fn oklab_palette(&self) -> Vec<Oklab> {
+        fn finalize(
+            kmeans: Kmeans<Oklab, f32, 3>,
+            sort: bool,
+            lightness_weight: f32,
+        ) -> Vec<Oklab> {
+            let mut palette = if sort {
+                let (palette, counts) = kmeans.into_palette_and_counts();
+                let mut pairs = palette.into_iter().zip(counts).collect::<Vec<_>>();
+                pairs.sort_by_key(|&(_, n)| n);
+                pairs.into_iter().map(|(c, _)| c).collect()
+            } else {
+                kmeans.into_palette().into_vec()
+            };
 
-    /// Computes the [`Oklab`] quatization output.
-    fn oklab_quantize_result(&self) -> QuantizeOutput<Oklab> {
+            for color in &mut palette {
+                color.l /= lightness_weight;
+            }
+
+            palette
+        }
+
         let Self {
-            lightness_weight,
-            colors,
+            image,
             palette_size,
-            seed,
-            sampling_factor,
-            #[cfg(feature = "threads")]
-            batch_size,
+            kmeans_options,
+            dedup,
+            lightness_weight,
+            sort_by_frequency,
             #[cfg(feature = "threads")]
             parallel,
-            ..
         } = *self;
+
+        if image.is_empty() {
+            return Vec::new();
+        }
+
+        let binner = {
+            let mut ranges = BinnerF32x3::<16, 32, 16>::OKLAB_COMPONENT_RANGES_FROM_SRGB8;
+            ranges[0].1 *= lightness_weight;
+            BinnerF32x3::<16, 32, 16>::new(ranges)
+        };
 
         #[cfg(feature = "threads")]
         if parallel {
-            let unique = internal::unique_oklab_counts_par(colors, lightness_weight);
-            let result = internal::wu_palette_par(&unique, palette_size, lightness_weight);
-            let samples = internal::num_samples(&unique, sampling_factor);
-
-            return if samples < batch_size {
-                result
+            let kmeans = if dedup.unwrap_or(image.num_pixels() >= 2048 * 2048) {
+                let mut image = dedup::dedup_image_u8_3_counts_par(image)
+                    .map(|palette| srgb8_to_oklab_par(&palette));
+                image
+                    .palette_mut()
+                    .par_iter_mut()
+                    .for_each(|c| c.l *= lightness_weight);
+                #[allow(clippy::expect_used)]
+                let centroids = WuF32x3::run_indexed_image_counts_par(&image, binner)
+                    .expect("non-empty image")
+                    .palette(palette_size);
+                Kmeans::run_indexed_image_par(image.as_ref(), centroids, kmeans_options)
             } else {
-                internal::kmeans_palette_par(&unique, samples, batch_size, result.palette, seed)
+                let mut image = image.map(srgb8_to_oklab_par);
+                image
+                    .as_mut_slice()
+                    .par_iter_mut()
+                    .for_each(|c| c.l *= lightness_weight);
+                #[allow(clippy::expect_used)]
+                let centroids = WuF32x3::run_image_par(image.as_ref(), binner)
+                    .expect("non-empty image")
+                    .palette(palette_size);
+                Kmeans::run_image_par(image.as_ref(), centroids, kmeans_options)
             };
+            return finalize(kmeans, sort_by_frequency, lightness_weight);
         }
 
-        let unique = internal::unique_oklab_counts(colors, lightness_weight);
-        let result = internal::wu_palette(&unique, palette_size, lightness_weight);
-        let samples = internal::num_samples(&unique, sampling_factor);
-
-        if samples == 0 {
-            result
+        let kmeans = if dedup.unwrap_or(image.num_pixels() >= 2048 * 2048) {
+            let mut image =
+                dedup::dedup_image_u8_3_counts(image).map(|palette| srgb8_to_oklab(&palette));
+            for c in image.palette_mut() {
+                c.l *= lightness_weight;
+            }
+            #[allow(clippy::expect_used)]
+            let centroids = WuF32x3::run_indexed_image_counts(&image, binner)
+                .expect("non-empty image")
+                .palette(palette_size);
+            Kmeans::run_indexed_image(image.as_ref(), centroids, kmeans_options)
         } else {
-            internal::kmeans_palette(&unique, samples, result.palette, seed)
-        }
-    }
-
-    /// Computes the color palette and returns it as [`Oklab`] colors.
-    #[must_use]
-    pub fn oklab_palette(&mut self) -> Vec<Oklab> {
-        let result = self.oklab_quantize_result();
-
-        let mut palette = if self.sort_by_frequency {
-            internal::sort_by_frequency(result)
-        } else {
-            result.palette
+            let mut image = image.map(srgb8_to_oklab);
+            for c in image.as_mut_slice() {
+                c.l *= lightness_weight;
+            }
+            #[allow(clippy::expect_used)]
+            let centroids = WuF32x3::run_image(image.as_ref(), binner)
+                .expect("non-empty image")
+                .palette(palette_size);
+            Kmeans::run_image(image.as_ref(), centroids, kmeans_options)
         };
 
-        internal::restore_lightness(&mut palette, self.lightness_weight);
-
-        palette
+        finalize(kmeans, sort_by_frequency, lightness_weight)
     }
 
     /// Computes the color palette and converts it to [`Srgb<u8>`] colors.
     #[must_use]
-    pub fn srgb8_palette(&mut self) -> Vec<Srgb<u8>> {
-        internal::oklab_to_srgb(self.oklab_palette())
+    #[inline]
+    pub fn srgb8_palette(&self) -> Vec<Srgb<u8>> {
+        let palette = self.oklab_palette();
+        oklab_to_srgb8(&palette)
     }
 
     /// Computes the color palette and converts it to [`Srgb`] colors.
     #[must_use]
-    pub fn srgb_palette(&mut self) -> Vec<Srgb> {
-        internal::oklab_to_srgb(self.oklab_palette())
+    #[inline]
+    pub fn srgb_palette(&self) -> Vec<Srgb> {
+        let palette = self.oklab_palette();
+        palette.into_iter().map(IntoColor::into_color).collect()
     }
 }
 
 #[cfg(feature = "threads")]
-impl<'a> Okolors<'a> {
-    /// Sets the batch size which determines the number of samples to group together in k-means.
-    ///
-    /// Increasing the batch size reduces the running time but with dimishing returns.
-    /// Smaller batch sizes are more accurate but slower to run.
-    ///
-    /// The default batch size is `4096`.
-    pub fn batch_size(&mut self, batch_size: u32) -> &mut Self {
-        self.batch_size = batch_size;
-        self
-    }
-
+impl Okolors<'_> {
     /// Sets whether or not to use multiple threads to compute the palette.
     ///
-    /// The number of threads can be configured using a `rayon` thread pool.
+    /// The number of threads can be configured using a [`rayon::ThreadPool`].
     ///
     /// By default, single-threaded execution is used.
-    pub fn parallel(&mut self, parallel: bool) -> &mut Self {
+    #[inline]
+    pub fn parallel(mut self, parallel: bool) -> Self {
         self.parallel = parallel;
         self
     }
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use palette::{cast::ComponentsInto, Srgb};
+    use palette::{Srgb, cast::ComponentsInto as _};
 
     #[rustfmt::skip]
     fn test_colors() -> Vec<Srgb<u8>> {
@@ -397,7 +412,7 @@ mod tests {
     #[test]
     fn zero_lightness_weight() {
         let colors = test_colors();
-        let palette = Okolors::try_from(colors.as_slice())
+        let palette = Okolors::new(&colors)
             .unwrap()
             .lightness_weight(0.0)
             .oklab_palette();
@@ -409,56 +424,32 @@ mod tests {
     fn not_enough_colors() {
         let colors = test_colors();
         let k = 100;
-        let palette = Okolors::try_from(&colors[..k])
+        let palette = Okolors::new(&colors[..k])
             .unwrap()
             .palette_size(PaletteSize::MAX)
             .oklab_palette();
 
         assert!(palette.len() <= k);
-
-        #[cfg(feature = "threads")]
-        {
-            let palette = Okolors::try_from(&colors[..k])
-                .unwrap()
-                .palette_size(PaletteSize::MAX)
-                .batch_size(64)
-                .parallel(true)
-                .oklab_palette();
-
-            assert!(palette.len() <= k);
-        }
     }
 
     #[test]
     fn no_samples() {
         let colors = test_colors();
-        let palette = Okolors::try_from(colors.as_slice())
+        let palette = Okolors::new(colors.as_slice())
             .unwrap()
-            .sampling_factor(0.0)
+            .kmeans_options(KmeansOptions::new().sampling_factor(0.0))
             .oklab_palette();
 
         assert_eq!(palette.len(), 8);
-
-        #[cfg(feature = "threads")]
-        {
-            let palette = Okolors::try_from(colors.as_slice())
-                .unwrap()
-                .sampling_factor(0.0)
-                .batch_size(64)
-                .parallel(true)
-                .oklab_palette();
-
-            assert_eq!(palette.len(), 8);
-        }
     }
 
     #[test]
     #[cfg(feature = "threads")]
     fn zero_batch_size() {
         let colors = test_colors();
-        let palette = Okolors::try_from(colors.as_slice())
+        let palette = Okolors::new(colors.as_slice())
             .unwrap()
-            .batch_size(0)
+            .kmeans_options(KmeansOptions::new().batch_size(0))
             .parallel(true)
             .oklab_palette();
 

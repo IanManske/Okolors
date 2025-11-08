@@ -8,3 +8,6 @@ ignore-hidden = false
 extend-ignore-re = [
     "Jarrett Kow",
 ]
+
+[default.extend-words]
+"colro" = "color"

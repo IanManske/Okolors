@@ -15,10 +15,19 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - run: rustup update stable
-      - uses: taiki-e/upload-rust-binary-action@v1
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: dtolnay/rust-toolchain@9a1d20035bdbcbc899baabe1e402e85bc33639bc # 1.90.0
+      - uses: taiki-e/upload-rust-binary-action@3962470d6e7f1993108411bc3f75a135ec67fc8c # v1.27.0
         with:
           bin: okolors
           archive: $bin-$tag-$target
           token: ${{ secrets.GITHUB_TOKEN }}
+          locked: true
+      - uses: taiki-e/upload-rust-binary-action@3962470d6e7f1993108411bc3f75a135ec67fc8c # v1.27.0
+        with:
+          bin: okolors
+          archive: $bin-$tag-$target-avx2
+          token: ${{ secrets.GITHUB_TOKEN }}
+          locked: true
+        env:
+          RUSTFLAGS: -C target_feature=+avx2
