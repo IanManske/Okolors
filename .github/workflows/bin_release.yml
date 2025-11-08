@@ -24,7 +24,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           locked: true
       - uses: taiki-e/upload-rust-binary-action@3962470d6e7f1993108411bc3f75a135ec67fc8c # v1.27.0
-        if ${{ matrix.os != 'macos-latest' }}
+        if: ${{ matrix.os != 'macos-latest' }}
         with:
           bin: okolors
           archive: $bin-$tag-$target-avx2
