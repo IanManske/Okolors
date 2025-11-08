@@ -1,0 +1,31 @@
+[package]
+name = "okolors-cli"
+version = "0.8.1"
+rust-version.workspace = true
+edition.workspace = true
+description = "Create color palettes from images by performing k-means clustering in the Oklab color space."
+repository = "https://github.com/IanManske/Okolors"
+license = "MIT OR Apache-2.0"
+publish = false # Publish binary releases on Github
+
+[[bin]]
+name = "okolors"
+path = "src/main.rs"
+
+[features]
+default = ["threads"]
+threads = ["okolors/threads", "rayon"]
+
+[dependencies]
+okolors = { path = "../okolors", default-features = false, features = ["image"] }
+palette = { workspace = true, default-features = false }
+clap = { version = "4.0.18", features = ["derive"] }
+colored = "2.1.0"
+image = { workspace = true, default-features = false, features = ["jpeg", "png", "gif", "webp", "qoi"] }
+rayon = { workspace = true, optional = true }
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.29.0", features = ["signal"] }
+
+[lints]
+workspace = true

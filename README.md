@@ -1,22 +1,10 @@
 # Okolors
 
-Okolors generates high quality color palettes from an image for your theming needs.
-It does this by converting the image's pixels to the
-[Oklab](https://bottosson.github.io/posts/oklab/) color space
-and then performing [k-means](https://en.wikipedia.org/wiki/K-means_clustering) clustering.
-By using a proper color space for color difference and a more accurate clustering algorithm,
-this helps to ensure that the generated palette is truly representative of the input image.
+Okolors generates high quality color palettes from an image for your theming needs. It does this by converting the image's pixels to the [Oklab](https://bottosson.github.io/posts/oklab/) color space and then performing [k-means](https://en.wikipedia.org/wiki/K-means_clustering) clustering. By using a proper color space for color difference and a more accurate clustering algorithm, this helps to ensure that the generated palette is truly representative of the input image.
 
-One of the main intended use cases for Okolors is to generate colors for a theme based off a wallpaper.
-In line with this goal, the Okolors also supports printing the final average colors in multiple Okhsl lightness levels.
-For example, you can specify a low lightness level for background colors
-and a high lightness for foreground text in order to achieve a certain contrast ratio.
-The [Okhsl](https://bottosson.github.io/posts/colorpicker/) color space is ideal for this,
-because as the lightness is changed, Okhsl preserves the hue and saturation of the color
-(better than other color spaces like HSL).
+One of the main intended use cases for Okolors is to generate colors for a theme based off a wallpaper. In line with this goal, Okolors also supports printing the final palette colors in multiple Okhsl lightness levels. For example, you can specify a low lightness level for background colors and a high lightness for foreground text in order to achieve a certain contrast ratio. The [Okhsl](https://bottosson.github.io/posts/colorpicker/) color space is ideal for this, because as the lightness is changed, Okhsl preserves the hue and saturation of the color (better than other color spaces like HSL).
 
-Okolors supports jpeg, png, gif, webp, and qoi images by default.
-Precompiled binaries are available on [Github](https://github.com/Ivordir/Okolors/releases).
+Okolors supports jpeg, png, gif, webp, and qoi images by default. Precompiled binaries are available on [Github](https://github.com/IanManske/Okolors/releases).
 
 If you are looking for the Okolors library, see the crates.io page or the documentation:
 
@@ -38,8 +26,7 @@ Running Okolors for this image with the default options gives the following sRGB
 010202 041215 08343A DCE1E5 246673 C27E63 4A2D25 8B739B
 ```
 
-If your terminal supports true color,
-then you can use `-o swatch` to see blocks of the output colors.
+If your terminal supports true color, then you can use `-o swatch` to see blocks of the output colors.
 
 ```bash
 > okolors 'Jewel Changi.jpg' -o swatch
@@ -55,8 +42,7 @@ Let's get these colors in additional lightness levels using `-l`.
 
 ![](docs/cli/swatch2.svg)
 
-If we're providing our own lightness levels, maybe we want to cluster the colors by hue and saturation only.
-Let's set the lightness weight to `0` using `-w`.
+If we're providing our own lightness levels, maybe we want to cluster the colors by hue and saturation only. Let's set the lightness weight to `0` using `-w`.
 
 ```bash
 > okolors 'Jewel Changi.jpg' -w 0 -l 10,30,50,70 -o swatch
@@ -64,8 +50,7 @@ Let's set the lightness weight to `0` using `-w`.
 
 ![](docs/cli/swatch3.svg)
 
-That ended up bringing out an additional pinkish color but also merged white and black into a gray.
-So, use this at your own discretion!
+That ended up bringing out an additional pinkish color but also merged white and black into a gray. So, use this at your own discretion!
 
 If some of the colors still seem quite similar, then you can reduce/set the number of colors through `-k`.
 
@@ -99,25 +84,17 @@ Here are some more examples of Okolors in action. The only CLI flag used was `-s
 
 # Performance
 
-Okolors is designed with performance in mind and should give fast results for even very large images.
-This is despite using k-means which is more accurate but slower than something like median cut quantization.
-Below are the palette generation times as reported by the `--verbose` flag.
-The only other flag used was `-t 4` to use 4 threads.
+Okolors is designed with performance in mind and should give fast results for even very large images. This is despite using k-means which is more accurate but slower than something like median cut quantization. Below are the palette generation times as reported by the CLI application with the `--verbose` flag. The only other flag used was `-t 4` to use 4 threads. The default/empty `RUSTFLAGS` were specified.
 
-| Image               | Width | Height | Unique Colors | Time (ms) |
-| ------------------- | -----:| ------:| -------------:| ---------:|
-| Louvre              | 6056  | 4000   | 616101        | 63        |
-| Hokkaido            | 6000  | 4000   | 576339        | 57        |
-| Jewel Changi        | 6000  | 4000   | 400788        | 48        |
-| Český Krumlov       | 4608  | 3456   | 743552        | 51        |
-| Lake Mendota        | 3839  | 5758   | 467802        | 55        |
-| Louvre (25%)        | 1514  | 1000   | 238332        | 18        |
-| Hokkaido (25%)      | 1500  | 1000   | 262207        | 18        |
-| Jewel Changi (25%)  | 1500  | 1000   | 147678        | 11        |
-| Český Krumlov (25%) | 1152  | 864    | 294989        | 20        |
-| Lake Mendota (25%)  | 960   | 1440   | 264149        | 18        |
+| Image               | Width | Height | Time (ms) |
+| ------------------- | -----:| ------:| ---------:|
+| Louvre              | 6056  | 4000   | 59        |
+| Hokkaido            | 6000  | 4000   | 57        |
+| Jewel Changi        | 6000  | 4000   | 61        |
+| Český Krumlov       | 4608  | 3456   | 41        |
+| Lake Mendota        | 3839  | 5758   | 53        |
 
-Oftentimes, especially for large images, loading and decoding the image takes longer than it does for Okolors to generate the palette!
+If your hardware supports it, consider downloading the AVX2 variants of the precomplied binaries for a noticeable speedup, since the underlying quantization library ([`quantette`](https://github.com/IanManske/quantette)) utilizes SIMD. For more extensive benchmarks, see the README for `quantette`.
 
 # References
 

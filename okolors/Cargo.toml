@@ -1,11 +1,10 @@
 [package]
 name = "okolors"
 version = "0.8.1"
-authors = ["Ivordir <Ivordir@pm.me>"]
-edition = "2021"
+rust-version.workspace = true
+edition.workspace = true
 description = "Create color palettes from images by performing k-means clustering in the Oklab color space."
-homepage = "https://github.com/Ivordir/Okolors"
-repository = "https://github.com/Ivordir/Okolors"
+repository = "https://github.com/IanManske/Okolors"
 license = "MIT OR Apache-2.0"
 include = ["src", "CHANGELOG.md"]
 keywords = ["palette", "theme", "color", "oklab", "kmeans"]
@@ -13,14 +12,23 @@ categories = ["multimedia::images"]
 
 [features]
 default = ["threads", "image"]
-threads = ["quantette/threads"]
-image = ["quantette/image", "dep:image"]
-
-# Exposes the `internal` module which currently does not follow semantic versioning.
-# This is intended to be used by the Okolors CLI application.
-_internal = []
+std = ["quantette/std"]
+threads = ["quantette/threads", "rayon", "std"]
+image = ["quantette/image", "std", "dep:image"]
 
 [dependencies]
-quantette = { version = "0.3.0", default-features = false, features = ["kmeans", "colorspaces"] }
-palette = { version = "0.7.3", default-features = false }
-image = { version = "0.25.0", default-features = false, optional = true }
+quantette = { version = "0.5.1", default-features = false, features = ["kmeans"] }
+palette = { workspace = true, default-features = false }
+image = { workspace = true, default-features = false, optional = true }
+rayon = { workspace = true, optional = true }
+
+# for minimal-versions
+[target.'cfg(any())'.dependencies]
+flate2 = { version = "1.0.24", default-features = false, optional = true } # needed for image / png to build on stable rust
+tap = { version = "1.0.1", default-features = false, optional = true } # needed for bitvec
+
+[lints]
+workspace = true
+
+[[package.metadata.docs.rs]]
+all-features = true
