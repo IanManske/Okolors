@@ -8,6 +8,7 @@ updates:
       - dependency-name: '*'
         update-types:
           - 'version-update:semver-patch'
+      - dependency-name: crate-ci/typos
   - package-ecosystem: cargo
     directory: /
     schedule:
